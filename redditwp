@@ -199,7 +199,7 @@ def cleanbyaspect(im, iw, ih, fpath):
     aspect = "%d:%d" % (int(iw/r), int(ih/r))
 
     if aspect != options.aspect:
-        os.system("rm '" + fpath + "'")
+        os.remove(fpath)
 
         log.info("Removed %s it had incorrect aspect (%s)" % (
             fpath,
@@ -217,7 +217,7 @@ def cleanbysize(im, iw, ih, fpath):
             return
 
     if width < iw or height < ih:
-        os.system("rm '" + fpath + "'")
+        os.remove(fpath)
 
         log.info("Removed %s it was lowres (%dx%d)" % (
             fpath,
