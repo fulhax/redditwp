@@ -37,6 +37,7 @@ optional arguments:
                         False)
   -no-clean             Remove small images (default: False)
   -recursive-clean      Clean folders recursive (default: False)
+  -force-clean          Don't prompt before cleaning folders (default: False)
   -no-download          If you just want to run clean (default: False)
   -nsfw                 Download nsfw (default: False)
   -ignore-cache         Ignore previously cached urls (default: False)

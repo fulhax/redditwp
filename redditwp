@@ -70,7 +70,7 @@ def parse_args():
     parser.add_argument(
         'subreddits',
         type=str,
-        nargs='?',
+        nargs='*',
         help='Your choice of subreddits where to download Images'
     )
 
@@ -137,6 +137,12 @@ def parse_args():
         help='Clean folders recursive'
     )
     parser.add_argument(
+        '-force-clean',
+        default=False,
+        action='store_true',
+        help="Don't prompt before cleaning folders"
+    )
+    parser.add_argument(
         '-no-download',
         default=False,
         action='store_true',
@@ -164,9 +170,30 @@ def parse_args():
 
 
 def cleanunwanted(dir):
+    log.warning(
+        "Are you sure you want to clean %s [y/N]?\n"
+        "(this will run removal check for all images in the"
+        " folder not just the currently downloaded)"
+        % path.realpath(dir)
+    )
+
+    yes = {'yes', 'y'}
+    no = {'no', 'n', ''}
+
+    while True:
+        choice = input()
+
+        print(choice)
+        if choice in yes:
+            break
+        elif choice in no:
+            return
+        else:
+            print("Please respond with 'yes' or 'no' (or 'y' or 'n').")
+
     (hqw, hqh) = options.res.split('x')
 
-    log.debug("Checking %s for cleaning" % dir)
+    log.debug("Checking %s for cleaning" % path.realpath(dir))
     for fpath in returnwallpaper(dir):
         with Image.open(fpath) as im:
             width, height = im.size
@@ -181,7 +208,6 @@ def cleanunwanted(dir):
 
 
 def returnwallpaper(dir):
-
     if options.recursive_clean is False:
         return [
             path.join(dir, f) for f in os.listdir(dir) if re.search(
@@ -267,7 +293,7 @@ def downloadimage(domain, imurl, dir):
         pass
 
 
-def download(url, subreddit):
+def download(url, subreddit, dir):
     try:
         obj = http.request('GET', url)
         data = json.loads(obj.data.decode('utf-8'))
@@ -280,12 +306,9 @@ def download(url, subreddit):
         return
 
     count = 0
-    dir = options.directory
-    if options.subfolders:
-        dir += '/' + subreddit
 
-    if not os.path.exists(dir):
-        log.debug("Creating folder %s" % dir)
+    if not path.exists(dir):
+        log.debug("Creating folder %s" % path.realpath(dir))
         os.makedirs(dir)
 
     for i in data["data"]["children"]:
@@ -309,9 +332,6 @@ def download(url, subreddit):
         count += downloadimage(domain, imurl, dir)
 
     log.info("Downloaded %d images" % (count))
-
-    if options.no_clean is False:
-        cleanunwanted(dir)
 
     return data["data"]["after"]
 
@@ -357,6 +377,10 @@ if __name__ == '__main__':
             step = limit
             after = ''
 
+            dir = options.directory
+            if options.subfolders:
+                dir += '/' + subreddit
+
             while True:
                 log.info("Checking %s subreddit %s (%d - %d)" % (
                     options.list,
@@ -374,6 +398,7 @@ if __name__ == '__main__':
                         (step - count)
                     ),
                     subreddit,
+                    dir
                 )
 
                 count += limit
@@ -386,6 +411,9 @@ if __name__ == '__main__':
 
                 if count >= options.count:
                     break
+
+            if options.no_clean is False:
+                cleanunwanted(dir)
 
         writecache()
     elif options.no_clean is False:
