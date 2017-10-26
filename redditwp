@@ -211,7 +211,7 @@ def cleanbysize(im, iw, ih, fpath):
     width, height = im.size
 
     if options.clean_by_aspect is True:
-        if cleanbyaspect(im, iw, ih, fpath) is True:
+        if cleanbyaspect(im, width, height, fpath) is True:
             return
 
     if width < iw or height < ih:
