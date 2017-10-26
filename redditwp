@@ -5,7 +5,6 @@ import pwd
 import sys
 import json
 import argparse
-import mimetypes
 import logging as log
 
 from copy import copy
@@ -171,30 +170,12 @@ def returnwallpaper():
     ]
 
 
-def checkdomain(domain, imurl):
-    if (domain == 'i.redd.it'):
-        return imurl
-    elif (domain == 'i.imgur.com'):
-        return imurl
-
-    return None
-
-
-def downloadimage(domain, chkurl, dir):
-    imurl = checkdomain(domain, chkurl)
-
-    if imurl is None:
-        log.debug("Skipping %s because of invalid domain %s" % (
-            chkurl,
-            domain
-        ))
-        return 0
-
+def downloadimage(domain, imurl, dir):
     if imurl in cache:
-        log.debug("Skipping %s, it exists in url-cache" % (chkurl))
+        log.debug("Skipping %s, it exists in url-cache" % (imurl))
         return 0
 
-    cache.append(chkurl)
+    cache.append(imurl)
 
     try:
         imgdata = http.request(
@@ -203,21 +184,24 @@ def downloadimage(domain, chkurl, dir):
         )
 
         content_type = imgdata.headers['content-type']
-        ext = mimetypes.guess_extension(content_type)
 
-        if ext is None:
-            return 0
-
-        ext = re.sub(r'jpeg?$', 'jpg', ext)
-        if not re.search(r'(jpg|png)$', ext):
+        if not re.search(r'image\/(jpeg|png)', content_type):
+            log.debug("Invalid content type %s" % content_type)
             return 0
 
         try:
-            filename = imgdata.info()['Content-Disposition']
+            filename = imgdata.info()['Content-Disposition'].lower()
         except KeyError:
             filename = os.path.basename(
                 urllib3.util.url.parse_url(imurl).path
-            )
+            ).lower()
+
+        if not re.search(r'\.(jpg|png)$', filename):
+            filename = re.sub(r'(jpg|png).*', r'\1', filename)
+
+            if not re.search(r'\.(jpg|png)$', filename):
+                log.debug("Invalid filename %s" % filename)
+                return 0
 
         if Path(dir + "/" + filename).exists():
             log.warning("%s already exists in %s" % (filename, dir))
