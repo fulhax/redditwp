@@ -1,0 +1,369 @@
+#!/bin/env python3
+import os
+import re
+import pwd
+import sys
+import json
+import argparse
+import mimetypes
+import logging as log
+
+from copy import copy
+from time import sleep
+from pathlib import Path
+
+import certifi
+import urllib3
+
+from PIL import Image
+
+http = urllib3.PoolManager(
+    cert_reqs='CERT_REQUIRED',
+    ca_certs=certifi.where()
+)
+
+cachefile = '/tmp/redditwp.cache'
+options = []
+cache = []
+
+if not sys.platform.startswith("win") and sys.stderr.isatty():
+    def add_color_emit_ansi(fn):
+        """Add methods we need to the class."""
+        def new(*args):
+            """Method overload."""
+            if len(args) == 2:
+                new_args = (args[0], copy(args[1]))
+            else:
+                new_args = (args[0], copy(args[1]), args[2:])
+            if hasattr(args[0], 'baseFilename'):
+                return fn(*args)
+            levelno = new_args[1].levelno
+            if levelno >= 50:
+                color = '\x1b[31;5;7m\n '  # blinking red with black
+            elif levelno >= 40:
+                color = '\x1b[31m'  # red
+            elif levelno >= 30:
+                color = '\x1b[33m'  # yellow
+            elif levelno >= 20:
+                color = '\x1b[32m'  # green
+            elif levelno >= 10:
+                color = '\x1b[35m'  # pink
+            else:
+                color = '\x1b[0m'  # normal
+            try:
+                new_args[1].msg = color + str(new_args[1].msg) + ' \x1b[0m'
+            except Exception as reason:
+                print(reason)  # Do not use log here.
+            return fn(*new_args)
+        return new
+    # all non-Windows platforms support ANSI Colors so we use them
+    log.StreamHandler.emit = add_color_emit_ansi(log.StreamHandler.emit)
+
+
+def parse_args():
+    username = pwd.getpwuid(os.getuid()).pw_name
+
+    parser = argparse.ArgumentParser(
+        description='Get wallpapers from your choice of subreddits!',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument(
+        'subreddits',
+        type=str,
+        nargs='+',
+        help='Your choice of subreddits where to download Images'
+    )
+
+    parser.add_argument(
+        '--min-score',
+        type=int,
+        default=500,
+        help='Minimum score to download'
+    )
+    parser.add_argument(
+        '--debuglevel',
+        type=int,
+        default=log.INFO,
+        help='Set debug level'
+    )
+    parser.add_argument(
+        '--directory',
+        type=str,
+        default="/home/" + username + "/images/wallpapers",
+        help='Download directory'
+    )
+    parser.add_argument(
+        '--list',
+        type=str,
+        choices=['hot', 'top', 'new', 'random', 'rising'],
+        default="hot",
+        help='Subreddit list'
+    )
+    parser.add_argument(
+        '--time',
+        type=str,
+        choices=['hour', 'day', 'week', 'month', 'year', 'all'],
+        default="all",
+        help='Subreddit time (dont work with new or hot)'
+    )
+    parser.add_argument(
+        '--hq',
+        type=str,
+        default='1920x1080',
+        help='If you want to download only high quality photos'
+    )
+    parser.add_argument(
+        '--count',
+        type=int,
+        default=25,
+        help='Number of threads to check'
+    )
+    parser.add_argument(
+        '-subfolders',
+        default=False,
+        action='store_true',
+        help='Store in subfolders with subredditname'
+    )
+    parser.add_argument(
+        '-nsfw',
+        default=False,
+        action='store_true',
+        help='Download nsfw'
+    )
+    parser.add_argument(
+        '-ignore-cache',
+        default=False,
+        action='store_true',
+        help='Ignore previously cached urls'
+    )
+
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
+
+    args = parser.parse_args()
+    return args
+
+
+def removeUnwantedPhotos():
+    (hqw, hqh) = options.hq.split('x')
+
+    for paths in returnwallpaper():
+        fpath = options.directory + "/" + paths
+
+        with Image.open(fpath) as im:
+            width, height = im.size
+            if width < int(hqw) or height < int(hqh):
+                np = "rm " + fpath
+                os.system(np)
+                log.info("Removed %s it's not hq (%dx%d)" % (
+                    paths,
+                    width,
+                    height
+                ))
+
+
+def returnwallpaper():
+    return [
+        f for f in os.listdir(
+            options.directory
+        ) if re.search(r'.*(jpg|png)$', f)
+    ]
+
+
+def checkdomain(domain, imurl):
+    if (domain == 'i.redd.it'):
+        return imurl
+    elif (domain == 'i.imgur.com'):
+        return imurl
+
+    return None
+
+
+def downloadimage(domain, chkurl, dir):
+    imurl = checkdomain(domain, chkurl)
+
+    if imurl is None:
+        log.debug("Skipping %s because of invalid domain %s" % (
+            chkurl,
+            domain
+        ))
+        return 0
+
+    if imurl in cache:
+        log.debug("Skipping %s, it exists in url-cache" % (chkurl))
+        return 0
+
+    cache.append(chkurl)
+
+    try:
+        imgdata = http.request(
+            'HEAD',
+            imurl
+        )
+
+        content_type = imgdata.headers['content-type']
+        ext = mimetypes.guess_extension(content_type)
+
+        if ext is None:
+            return 0
+
+        ext = re.sub(r'jpeg?$', 'jpg', ext)
+        if not re.search(r'(jpg|png)$', ext):
+            return 0
+
+        try:
+            filename = imgdata.info()['Content-Disposition']
+        except KeyError:
+            filename = os.path.basename(
+                urllib3.util.url.parse_url(imurl).path
+            )
+
+        if Path(dir + "/" + filename).exists():
+            log.warning("%s already exists in %s" % (filename, dir))
+            return 0
+
+        imgdata = http.request(
+            'GET',
+            imurl,
+            preload_content=False
+        )
+
+        log.info("Downloading %s as %s" % (imurl, content_type))
+
+        with open((dir + "/" + filename), "wb") as out:
+            while True:
+                data = imgdata.read(65536)
+                if not data:
+                    break
+                out.write(data)
+
+        imgdata.release_conn()
+
+        return 1
+
+    except Exception as e:
+        log.error(e)
+        pass
+
+
+def download(url, subreddit):
+    try:
+        obj = http.request('GET', url)
+        data = json.loads(obj.data.decode('utf-8'))
+    except Exception as e:
+        log.error(e)
+        return
+
+    if 'error' in data:
+        log.error("%d: %s" % (data['error'], data['message']))
+        return
+
+    count = 0
+    dir = options.directory
+    if options.subfolders:
+        dir += '/' + subreddit
+
+    if not os.path.exists(dir):
+        log.debug("Creating folder %s" % dir)
+        os.makedirs(dir)
+
+    for i in data["data"]["children"]:
+        domain = i["data"]["domain"]
+        imurl = i["data"]["url"]
+        nsfw = i["data"]["over_18"]
+        score = i["data"]["score"]
+
+        if score <= options.min_score:
+            log.debug("Skipping %s, score %d is less than %d" % (
+                imurl,
+                score,
+                options.min_score
+            ))
+            continue
+
+        if nsfw and not options.nsfw:
+            log.debug("Skipping %s because it's flagged as nsfw!" % imurl)
+            continue
+
+        count += downloadimage(domain, imurl, dir)
+
+    log.info("Downloaded %d images" % (count))
+
+    return data["data"]["after"]
+
+
+def writecache():
+    global cache
+    mode = 'w+'
+
+    if options.ignore_cache:
+        mode = 'w'
+
+    with open(cachefile, mode) as f:
+        for item in cache:
+            f.write("%s\n" % item)
+        f.close()
+
+
+def readcache():
+    global cache
+
+    if os.path.exists(cachefile) and not options.ignore_cache:
+        with open(cachefile, "r") as f:
+            cache = f.read().split('\n')
+            f.close()
+
+
+if __name__ == '__main__':
+    options = parse_args()
+
+    log.basicConfig(
+        level=options.debuglevel,
+        format="%(message)s",
+    )
+
+    count = 0
+    limit = min(options.count, 100)
+    step = limit
+    after = ''
+
+    url = 'https://www.reddit.com/r/%s/%s.json?after=%s&t=%s&limit=%d'
+
+    readcache()
+
+    for subreddit in options.subreddits:
+        while True:
+            log.info("Checking %s subreddit %s (%d - %d)" % (
+                options.list,
+                subreddit,
+                count,
+                step
+            ))
+
+            after = download(
+                url % (
+                    subreddit,
+                    options.list,
+                    after,
+                    options.time,
+                    (step - count)
+                ),
+                subreddit,
+            )
+
+            count += limit
+            step += limit
+
+            if (step > options.count):
+                step = options.count % step
+
+            sleep(2)
+
+            if count >= options.count:
+                break
+
+    writecache()
+
+    if options.hq:
+        removeUnwantedPhotos()
