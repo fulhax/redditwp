@@ -1,3 +1,4 @@
+```
 usage: redditwp [-h] [--min-score MIN_SCORE] [--debuglevel DEBUGLEVEL]
                 [--directory DIRECTORY] [--list {hot,top,new,random,rising}]
                 [--time {hour,day,week,month,year,all}] [--hq HQ]
@@ -31,3 +32,4 @@ optional arguments:
   -nsfw                 Download nsfw (default: False)
   -ignore-cache         Ignore previously cached urls (default: False)
 
+```
