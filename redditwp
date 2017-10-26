@@ -113,6 +113,12 @@ def parse_args():
         help='Minimum resolution to save (used with clean)'
     )
     parser.add_argument(
+        '--aspect',
+        type=str,
+        default='16:9',
+        help='Aspect ratio (used with clean / clean-by-aspect)'
+    )
+    parser.add_argument(
         '--count',
         type=int,
         default=25,
@@ -143,6 +149,18 @@ def parse_args():
         help="Don't prompt before cleaning folders"
     )
     parser.add_argument(
+        '-resize-larger',
+        default=False,
+        action='store_true',
+        help='Resize images larger than the specified minimum resolution'
+    )
+    parser.add_argument(
+        '-clean-by-aspect',
+        default=False,
+        action='store_true',
+        help='Removed images with incorrect aspect'
+    )
+    parser.add_argument(
         '-no-download',
         default=False,
         action='store_true',
@@ -169,6 +187,56 @@ def parse_args():
     return args
 
 
+def gcd(a, b):
+    if (b == 0):
+        return a
+
+    return gcd(b, a % b)
+
+
+def cleanbyaspect(im, iw, ih, fpath):
+    r = gcd(iw, ih)
+    aspect = "%d:%d" % (int(iw/r), int(ih/r))
+
+    if aspect != options.aspect:
+        os.system("rm '" + fpath + "'")
+
+        log.info("Removed %s it had incorrect aspect (%s)" % (
+            fpath,
+            aspect
+        ))
+
+
+def cleanbysize(im, iw, ih, fpath):
+    width, height = im.size
+
+    if options.clean_by_aspect is True:
+        if cleanbyaspect(im, iw, ih, fpath) is True:
+            return
+
+    if width < iw or height < ih:
+        os.system("rm '" + fpath + "'")
+
+        log.info("Removed %s it was lowres (%dx%d)" % (
+            fpath,
+            width,
+            height
+        ))
+    elif width > iw or height > ih:
+        if options.resize_larger is True:
+            try:
+                im.thumbnail((iw, ih))
+                im.save(fpath)
+
+                log.info("Resized %s it was highres (%dx%d)" % (
+                    fpath,
+                    width,
+                    height
+                ))
+            except Exception as e:
+                log.error(e)
+
+
 def cleanunwanted(dir):
     if options.force_clean is False:
         log.warning(
@@ -193,18 +261,13 @@ def cleanunwanted(dir):
 
     (hqw, hqh) = options.res.split('x')
 
+    iw = int(hqw)
+    ih = int(hqh)
+
     log.info("Cleaning %s" % path.realpath(dir))
     for fpath in returnwallpaper(dir):
         with Image.open(fpath) as im:
-            width, height = im.size
-            if width < int(hqw) or height < int(hqh):
-                os.system("rm '" + fpath + "'")
-
-                log.info("Removed %s it's lowres (%dx%d)" % (
-                    fpath,
-                    width,
-                    height
-                ))
+            cleanbysize(im, iw, ih, fpath)
 
 
 def returnwallpaper(dir):
