@@ -323,16 +323,16 @@ if __name__ == '__main__':
         format="%(message)s",
     )
 
-    count = 0
-    limit = min(options.count, 100)
-    step = limit
-    after = ''
-
     url = 'https://www.reddit.com/r/%s/%s.json?after=%s&t=%s&limit=%d'
 
     readcache()
 
     for subreddit in options.subreddits:
+        count = 0
+        limit = min(options.count, 100)
+        step = limit
+        after = ''
+
         while True:
             log.info("Checking %s subreddit %s (%d - %d)" % (
                 options.list,
