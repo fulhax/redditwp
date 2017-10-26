@@ -7,6 +7,7 @@ import json
 import argparse
 import logging as log
 
+from os import path
 from copy import copy
 from time import sleep
 from pathlib import Path
@@ -69,7 +70,7 @@ def parse_args():
     parser.add_argument(
         'subreddits',
         type=str,
-        nargs='+',
+        nargs='?',
         help='Your choice of subreddits where to download Images'
     )
 
@@ -125,9 +126,21 @@ def parse_args():
     )
     parser.add_argument(
         '-no-clean',
-        default=True,
-        action='store_false',
+        default=False,
+        action='store_true',
         help='Remove small images'
+    )
+    parser.add_argument(
+        '-recursive-clean',
+        default=False,
+        action='store_true',
+        help='Clean folders recursive'
+    )
+    parser.add_argument(
+        '-no-download',
+        default=False,
+        action='store_true',
+        help='If you just want to run clean'
     )
     parser.add_argument(
         '-nsfw',
@@ -154,24 +167,42 @@ def cleanunwanted(dir):
     (hqw, hqh) = options.res.split('x')
 
     log.debug("Checking %s for cleaning" % dir)
-
-    for paths in returnwallpaper(dir):
-        fpath = dir + "/" + paths
-
+    for fpath in returnwallpaper(dir):
         with Image.open(fpath) as im:
             width, height = im.size
             if width < int(hqw) or height < int(hqh):
-                np = "rm " + fpath
-                os.system(np)
-                log.info("Removed %s it's not hq (%dx%d)" % (
-                    paths,
+                os.system("rm '" + fpath + "'")
+
+                log.info("Removed %s it's lowres (%dx%d)" % (
+                    fpath,
                     width,
                     height
                 ))
 
 
 def returnwallpaper(dir):
-    return [f for f in os.listdir(dir) if re.search(r'.*(jpg|png)$', f)]
+
+    if options.recursive_clean is False:
+        return [
+            path.join(dir, f) for f in os.listdir(dir) if re.search(
+                r'.*(jpg|png)$',
+                f,
+                re.IGNORECASE
+            )
+        ]
+
+    output = []
+
+    for root, dirs, files in os.walk(dir):
+        output += [
+            path.join(root, f) for f in files if re.search(
+                r'.*(jpg|png)$',
+                f,
+                re.IGNORECASE
+            )
+        ]
+
+    return output
 
 
 def downloadimage(domain, imurl, dir):
@@ -279,9 +310,6 @@ def download(url, subreddit):
 
     log.info("Downloaded %d images" % (count))
 
-    if options.no_clean is True:
-        cleanunwanted(dir)
-
     return data["data"]["after"]
 
 
@@ -317,42 +345,46 @@ if __name__ == '__main__':
 
     url = 'https://www.reddit.com/r/%s/%s.json?after=%s&t=%s&limit=%d'
 
-    readcache()
+    if options.no_download is False:
+        readcache()
 
-    for subreddit in options.subreddits:
-        count = 0
-        limit = min(options.count, 100)
-        step = limit
-        after = ''
+        for subreddit in options.subreddits:
+            count = 0
+            limit = min(options.count, 100)
+            step = limit
+            after = ''
 
-        while True:
-            log.info("Checking %s subreddit %s (%d - %d)" % (
-                options.list,
-                subreddit,
-                count,
-                step
-            ))
-
-            after = download(
-                url % (
-                    subreddit,
+            while True:
+                log.info("Checking %s subreddit %s (%d - %d)" % (
                     options.list,
-                    after,
-                    options.time,
-                    (step - count)
-                ),
-                subreddit,
-            )
+                    subreddit,
+                    count,
+                    step
+                ))
 
-            count += limit
-            step += limit
+                after = download(
+                    url % (
+                        subreddit,
+                        options.list,
+                        after,
+                        options.time,
+                        (step - count)
+                    ),
+                    subreddit,
+                )
 
-            if (step > options.count):
-                step = options.count % step
+                count += limit
+                step += limit
 
-            sleep(2)
+                if (step > options.count):
+                    step = options.count % step
 
-            if count >= options.count:
-                break
+                sleep(2)
 
-    writecache()
+                if count >= options.count:
+                    break
+
+        writecache()
+
+    if options.no_clean is False:
+        cleanunwanted(options.directory)

@@ -7,14 +7,15 @@ Get wallpapers from your choice of subreddits!
 usage: redditwp [-h] [--min-score MIN_SCORE] [--debuglevel DEBUGLEVEL]
                 [--directory DIRECTORY] [--list {hot,top,new,random,rising}]
                 [--time {hour,day,week,month,year,all}] [--res RES]
-                [--count COUNT] [-subfolders] [-no-clean] [-nsfw]
-                [-ignore-cache]
-                subreddits [subreddits ...]
+                [--count COUNT] [-subfolders] [-no-clean] [-recursive-clean]
+                [-no-download] [-nsfw] [-ignore-cache]
+                [subreddits]
 
 Get wallpapers from your choice of subreddits!
 
 positional arguments:
   subreddits            Your choice of subreddits where to download Images
+                        (default: None)
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -34,7 +35,9 @@ optional arguments:
   --count COUNT         Number of threads to check (default: 25)
   -subfolders           Store in subfolders with subredditname (default:
                         False)
-  -no-clean             Remove small images (default: True)
+  -no-clean             Remove small images (default: False)
+  -recursive-clean      Clean folders recursive (default: False)
+  -no-download          If you just want to run clean (default: False)
   -nsfw                 Download nsfw (default: False)
   -ignore-cache         Ignore previously cached urls (default: False)
 
