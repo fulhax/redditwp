@@ -206,6 +206,8 @@ def cleanbyaspect(im, iw, ih, fpath):
             aspect
         ))
 
+        return True
+
 
 def cleanbysize(im, iw, ih, fpath):
     width, height = im.size
