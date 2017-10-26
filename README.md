@@ -1,3 +1,8 @@
+# redditwp
+
+Get wallpapers from your choice of subreddits!
+
+
 ```
 usage: redditwp [-h] [--min-score MIN_SCORE] [--debuglevel DEBUGLEVEL]
                 [--directory DIRECTORY] [--list {hot,top,new,random,rising}]
