@@ -106,10 +106,10 @@ def parse_args():
         help='Subreddit time (dont work with new or hot)'
     )
     parser.add_argument(
-        '--hq',
+        '--res',
         type=str,
         default='1920x1080',
-        help='If you want to download only high quality photos'
+        help='Minimum resolution to save (used with clean)'
     )
     parser.add_argument(
         '--count',
@@ -122,6 +122,12 @@ def parse_args():
         default=False,
         action='store_true',
         help='Store in subfolders with subredditname'
+    )
+    parser.add_argument(
+        '-no-clean',
+        default=True,
+        action='store_false',
+        help='Remove small images'
     )
     parser.add_argument(
         '-nsfw',
@@ -144,11 +150,13 @@ def parse_args():
     return args
 
 
-def removeUnwantedPhotos():
-    (hqw, hqh) = options.hq.split('x')
+def cleanunwanted(dir):
+    (hqw, hqh) = options.res.split('x')
 
-    for paths in returnwallpaper():
-        fpath = options.directory + "/" + paths
+    log.debug("Checking %s for cleaning" % dir)
+
+    for paths in returnwallpaper(dir):
+        fpath = dir + "/" + paths
 
         with Image.open(fpath) as im:
             width, height = im.size
@@ -162,12 +170,8 @@ def removeUnwantedPhotos():
                 ))
 
 
-def returnwallpaper():
-    return [
-        f for f in os.listdir(
-            options.directory
-        ) if re.search(r'.*(jpg|png)$', f)
-    ]
+def returnwallpaper(dir):
+    return [f for f in os.listdir(dir) if re.search(r'.*(jpg|png)$', f)]
 
 
 def downloadimage(domain, imurl, dir):
@@ -274,6 +278,9 @@ def download(url, subreddit):
 
     log.info("Downloaded %d images" % (count))
 
+    if options.no_clean is True:
+        cleanunwanted(dir)
+
     return data["data"]["after"]
 
 
@@ -348,6 +355,3 @@ if __name__ == '__main__':
                 break
 
     writecache()
-
-    if options.hq:
-        removeUnwantedPhotos()
