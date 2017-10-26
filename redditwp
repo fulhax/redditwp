@@ -310,6 +310,9 @@ def download(url, subreddit):
 
     log.info("Downloaded %d images" % (count))
 
+    if options.no_clean is False:
+        cleanunwanted(dir)
+
     return data["data"]["after"]
 
 
@@ -385,6 +388,5 @@ if __name__ == '__main__':
                     break
 
         writecache()
-
-    if options.no_clean is False:
+    elif options.no_clean is False:
         cleanunwanted(options.directory)
