@@ -11,6 +11,7 @@ from os import path
 from copy import copy
 from time import sleep
 from pathlib import Path
+from bs4 import BeautifulSoup as bs
 
 import certifi
 import urllib3
@@ -196,7 +197,7 @@ def gcd(a, b):
 
 def cleanbyaspect(im, iw, ih, fpath):
     r = gcd(iw, ih)
-    aspect = "%d:%d" % (int(iw/r), int(ih/r))
+    aspect = "%d:%d" % (int(iw / r), int(ih / r))
 
     if aspect != options.aspect:
         os.remove(fpath)
@@ -296,13 +297,38 @@ def returnwallpaper(dir):
     return output
 
 
-def downloadimage(domain, imurl, dir):
+def getimgur(url, dir):
+    log.debug("Trying to get images from imgur")
+
+    images = []
+
+    html = http.request(
+        'GET',
+        url,
+        preload_content=False
+    )
+
+    soup = bs(html.data, "html.parser")
+
+    for div in soup.findAll('div', attrs={'class': 'post-image'}):
+        links = div.findAll('a')
+
+        for a in links:
+            images.append('https:%s' % a["href"])
+
+    html.release_conn()
+
+    count = 0
+    for image in images:
+        count += downloadimage(image, dir)
+
+    return count
+
+
+def downloadimage(imurl, dir):
     if imurl in cache:
         log.debug("Skipping %s, it exists in url-cache" % (imurl))
         return 0
-
-    cache.append(imurl)
-
     try:
         imgdata = http.request(
             'HEAD',
@@ -310,10 +336,6 @@ def downloadimage(domain, imurl, dir):
         )
 
         content_type = imgdata.headers['content-type']
-
-        if not re.search(r'image\/(jpeg|png)', content_type):
-            log.debug("Invalid content type %s" % content_type)
-            return 0
 
         try:
             filename = imgdata.info()['Content-Disposition'].lower()
@@ -327,8 +349,20 @@ def downloadimage(domain, imurl, dir):
             filename = re.sub(r'(jpg|png).*', r'\1', filename)
 
             if not re.search(r'\.(jpg|png)$', filename):
-                log.debug("Invalid filename %s" % filename)
-                return 0
+                p = re.search(r'^https?://(www.)?imgur\.com(/a/)?', imurl)
+
+                if p is not None:
+                    if p.group(2) is not None:
+                        imurl += '/noscript'
+
+                    return getimgur(imurl, dir)
+                else:
+                    log.debug("Invalid filename %s" % filename)
+                    return 0
+
+        if not re.search(r'image\/(jpeg|png)', content_type):
+            log.debug("Invalid content type %s" % content_type)
+            return 0
 
         if Path(dir + "/" + filename).exists():
             log.warning("%s already exists in %s" % (filename, dir))
@@ -350,6 +384,7 @@ def downloadimage(domain, imurl, dir):
                 out.write(data)
 
         imgdata.release_conn()
+        cache.append(imurl)
 
         return 1
 
@@ -377,7 +412,6 @@ def download(url, subreddit, dir):
         os.makedirs(dir)
 
     for i in data["data"]["children"]:
-        domain = i["data"]["domain"]
         imurl = i["data"]["url"]
         nsfw = i["data"]["over_18"]
         score = i["data"]["score"]
@@ -394,7 +428,7 @@ def download(url, subreddit, dir):
             log.debug("Skipping %s because it's flagged as nsfw!" % imurl)
             continue
 
-        count += downloadimage(domain, imurl, dir)
+        count += downloadimage(imurl, dir)
 
     log.info("Downloaded %d images" % (count))
 
