@@ -202,7 +202,7 @@ def cleanbyaspect(im, iw, ih, fpath):
     if aspect != options.aspect:
         os.remove(fpath)
 
-        log.info("Removed %s it had incorrect aspect (%s)" % (
+        log.error("Removed %s it had incorrect aspect (%s)" % (
             fpath,
             aspect
         ))
@@ -220,7 +220,7 @@ def cleanbysize(im, iw, ih, fpath):
     if width < iw or height < ih:
         os.remove(fpath)
 
-        log.info("Removed %s it was lowres (%dx%d)" % (
+        log.error("Removed %s it was lowres (%dx%d)" % (
             fpath,
             width,
             height
@@ -231,7 +231,7 @@ def cleanbysize(im, iw, ih, fpath):
                 im.thumbnail((iw, ih))
                 im.save(fpath)
 
-                log.info("Resized %s it was highres (%dx%d)" % (
+                log.warning("Resized %s it was highres (%dx%d)" % (
                     fpath,
                     width,
                     height
@@ -269,8 +269,12 @@ def cleanunwanted(dir):
 
     log.info("Cleaning %s" % path.realpath(dir))
     for fpath in returnwallpaper(dir):
-        with Image.open(fpath) as im:
-            cleanbysize(im, iw, ih, fpath)
+        try:
+            with Image.open(fpath) as im:
+                cleanbysize(im, iw, ih, fpath)
+        except:
+            log.error('Unable to open file %s, removing it' % fpath)
+            os.remove(fpath)
 
 
 def returnwallpaper(dir):
@@ -390,7 +394,7 @@ def downloadimage(imurl, dir):
 
     except Exception as e:
         log.error(e)
-        pass
+        return 0
 
 
 def download(url, subreddit, dir):
